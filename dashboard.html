@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Tableau de bord — JobBoost AI</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar__brand">Job<span>Boost</span> AI</div>
+  <span id="planBadge" class="badge badge--free">FREE</span>
+</header>
+
+<main class="container">
+  <h1 id="greeting">Bonjour 👋</h1>
+
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <div class="muted">Crédits d'analyse disponibles</div>
+        <div style="font-size:28px; font-weight:800;" id="creditsValue">–</div>
+      </div>
+      <a href="pricing.html" class="btn btn--secondary btn--sm">Recharger</a>
+    </div>
+  </div>
+
+  <h2 style="margin-top:24px;">Que veux-tu faire ?</h2>
+  <div class="grid-actions">
+    <button class="action-tile" onclick="window.location.href='cv.html?mode=analyze'">
+      <div class="action-tile__icon">📈</div>
+      <div class="action-tile__label">Améliorer mon CV</div>
+    </button>
+    <button class="action-tile" onclick="window.location.href='cv.html?mode=letter'">
+      <div class="action-tile__icon">✉️</div>
+      <div class="action-tile__label">Lettre de motivation</div>
+    </button>
+    <button class="action-tile" onclick="window.location.href='cv.html?mode=match'">
+      <div class="action-tile__icon">🎯</div>
+      <div class="action-tile__label">Adapter à une offre</div>
+    </button>
+    <button class="action-tile" onclick="window.location.href='pricing.html'">
+      <div class="action-tile__icon">👑</div>
+      <div class="action-tile__label">CV GOLD</div>
+    </button>
+  </div>
+
+  <div id="alertBox" class="alert" style="margin-top:20px;"></div>
+</main>
+
+<nav class="bottom-nav">
+  <a href="dashboard.html" class="active"><span>🏠</span>Accueil</a>
+  <a href="cv.html"><span>📄</span>Mon CV</a>
+  <a href="pricing.html"><span>💳</span>Abonnement</a>
+  <a href="profile.html"><span>👤</span>Profil</a>
+</nav>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="app.js"></script>
+<script>
+requireLogin(async (user) => {
+  try {
+    const profile = await ensureUserProfile(user);
+    const firstName = (profile.displayName || 'là').split(' ')[0];
+    document.getElementById('greeting').textContent = `Bonjour ${firstName} 👋`;
+    document.getElementById('creditsValue').textContent = profile.credits ?? 0;
+    renderPlanBadge('planBadge', profile.plan || 'free');
+  } catch (err) {
+    showAlert('alertBox', 'Impossible de charger votre profil. Vérifiez votre connexion.');
+  }
+});
+</script>
+</body>
+</html>

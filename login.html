@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Connexion — JobBoost AI</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a href="index.html" class="topbar__back">←</a>
+  <div class="topbar__brand">Job<span>Boost</span> AI</div>
+  <span style="width:32px;"></span>
+</header>
+
+<main class="container">
+  <h1 id="formTitle">Connexion</h1>
+  <p class="subtitle">Accède à ton espace pour améliorer ton CV.</p>
+
+  <div id="alertBox" class="alert"></div>
+
+  <div class="card">
+    <form id="authForm">
+      <div class="field">
+        <label for="email">Adresse email</label>
+        <input type="email" id="email" autocomplete="email" required>
+      </div>
+      <div class="field">
+        <label for="password">Mot de passe</label>
+        <input type="password" id="password" autocomplete="current-password" minlength="6" required>
+      </div>
+      <button type="submit" class="btn btn--primary" id="submitBtn">Se connecter</button>
+    </form>
+
+    <div style="text-align:center; margin: 14px 0; color:#9CA3AF; font-size:13px;">ou</div>
+
+    <button id="googleBtn" class="btn btn--secondary">Continuer avec Google</button>
+  </div>
+
+  <p style="text-align:center;">
+    <span id="toggleText">Pas encore de compte ?</span>
+    <a href="#" id="toggleMode">Créer un compte</a>
+  </p>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="app.js"></script>
+<script>
+let isSignup = false;
+
+document.getElementById('toggleMode').addEventListener('click', (e) => {
+  e.preventDefault();
+  isSignup = !isSignup;
+  document.getElementById('formTitle').textContent = isSignup ? 'Créer un compte' : 'Connexion';
+  document.getElementById('submitBtn').textContent = isSignup ? 'Créer mon compte' : 'Se connecter';
+  document.getElementById('toggleText').textContent = isSignup ? 'Déjà un compte ?' : 'Pas encore de compte ?';
+  document.getElementById('toggleMode').textContent = isSignup ? 'Se connecter' : 'Créer un compte';
+  hideAlert('alertBox');
+});
+
+document.getElementById('authForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  hideAlert('alertBox');
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const btn = document.getElementById('submitBtn');
+  setButtonLoading(btn, true, isSignup ? 'Création...' : 'Connexion...');
+
+  try {
+    let cred;
+    if (isSignup) {
+      cred = await auth.createUserWithEmailAndPassword(email, password);
+    } else {
+      cred = await auth.signInWithEmailAndPassword(email, password);
+    }
+    await ensureUserProfile(cred.user);
+    window.location.href = 'dashboard.html';
+  } catch (err) {
+    showAlert('alertBox', translateError(err.code));
+  } finally {
+    setButtonLoading(btn, false);
+  }
+});
+
+document.getElementById('googleBtn').addEventListener('click', async () => {
+  hideAlert('alertBox');
+  const btn = document.getElementById('googleBtn');
+  setButtonLoading(btn, true, 'Connexion...');
+  try {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    const cred = await auth.signInWithPopup(provider);
+    await ensureUserProfile(cred.user);
+    window.location.href = 'dashboard.html';
+  } catch (err) {
+    showAlert('alertBox', translateError(err.code));
+  } finally {
+    setButtonLoading(btn, false);
+  }
+});
+
+// Si déjà connecté, direction le dashboard.
+auth.onAuthStateChanged((user) => { if (user) window.location.href = 'dashboard.html'; });
+</script>
+</body>
+</html>

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Analyser mon CV — JobBoost AI</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a href="dashboard.html" class="topbar__back">←</a>
+  <div class="topbar__brand" id="pageTitle">Améliorer mon CV</div>
+  <span style="width:32px;"></span>
+</header>
+
+<main class="container">
+  <p class="subtitle" id="pageSubtitle">Colle ton CV ci-dessous ou importe un fichier PDF.</p>
+
+  <div id="alertBox" class="alert"></div>
+
+  <div class="card">
+    <div class="field">
+      <label for="pdfInput">Importer un PDF (optionnel)</label>
+      <input type="file" id="pdfInput" accept="application/pdf">
+      <p class="muted" style="margin-top:6px;">L'extraction automatique peut être imparfaite. Vérifie et complète le texte ci-dessous si besoin.</p>
+    </div>
+
+    <div class="field">
+      <label for="cvText">Coller mon CV *</label>
+      <textarea id="cvText" placeholder="Collez ici le texte complet de votre CV..."></textarea>
+    </div>
+
+    <div class="field">
+      <label for="targetJob">Poste recherché *</label>
+      <input type="text" id="targetJob" placeholder="Ex : Développeur Web Junior">
+    </div>
+
+    <div id="letterFields" class="hidden">
+      <div class="field">
+        <label for="company">Entreprise</label>
+        <input type="text" id="company" placeholder="Ex : Orange Togo">
+      </div>
+      <div class="field">
+        <label for="jobOfferLetter">Offre d'emploi (optionnel)</label>
+        <textarea id="jobOfferLetter" placeholder="Colle ici le texte de l'offre d'emploi..."></textarea>
+      </div>
+    </div>
+
+    <div id="matchFields" class="hidden">
+      <div class="field">
+        <label for="jobOfferMatch">Offre d'emploi *</label>
+        <textarea id="jobOfferMatch" placeholder="Colle ici le texte de l'offre d'emploi..."></textarea>
+      </div>
+    </div>
+
+    <div id="progressWrap" class="hidden">
+      <div class="progress"><div class="progress__bar" id="progressBar"></div></div>
+      <p class="muted" id="progressLabel" style="text-align:center;">Analyse en cours...</p>
+    </div>
+
+    <button class="btn btn--primary" id="submitBtn">ANALYSER MON CV</button>
+  </div>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="firebase-config.js"></script>
+<script src="app.js"></script>
+<script src="gemini-client.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+const mode = params.get('mode') || 'analyze';
+
+const titles = {
+  analyze: ['Améliorer mon CV', 'Colle ton CV ci-dessous ou importe un fichier PDF.', 'ANALYSER MON CV'],
+  letter: ['Lettre de motivation', 'Colle ton CV, précise le poste et l\'entreprise visée.', 'GÉNÉRER LA LETTRE'],
+  match: ['Adapter à une offre', 'Colle ton CV et l\'offre d\'emploi à comparer.', 'COMPARER MON CV']
+};
+document.getElementById('pageTitle').textContent = titles[mode][0];
+document.getElementById('pageSubtitle').textContent = titles[mode][1];
+document.getElementById('submitBtn').textContent = titles[mode][2];
+if (mode === 'letter') {
+  document.getElementById('letterFields').classList.remove('hidden');
+} else if (mode === 'match') {
+  document.getElementById('matchFields').classList.remove('hidden');
+  document.getElementById('targetJob').closest('.field').classList.add('hidden');
+}
+
+requireLogin(() => {});
+
+// --- Import PDF (extraction texte côté client, best-effort) ---
+document.getElementById('pdfInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  hideAlert('alertBox');
+  try {
+    if (file.type !== 'application/pdf') {
+      showAlert('alertBox', 'Merci d\'importer un fichier PDF valide.');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      showAlert('alertBox', 'Le fichier PDF est trop volumineux (8 Mo maximum).');
+      return;
+    }
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const buffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+    let extractedText = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      extractedText += content.items.map((it) => it.str).join(' ') + '\n';
+    }
+    if (!extractedText.trim()) {
+      showAlert('alertBox', 'Aucun texte n\'a pu être extrait de ce PDF (probablement scanné). Colle ton CV manuellement.', 'warning');
+      return;
+    }
+    document.getElementById('cvText').value = extractedText.trim();
+    showAlert('alertBox', 'Texte importé. Vérifie qu\'il est complet avant de lancer l\'analyse.', 'info');
+  } catch (err) {
+    showAlert('alertBox', 'Impossible de lire ce PDF. Colle ton CV manuellement.', 'warning');
+  }
+});
+
+document.getElementById('submitBtn').addEventListener('click', async () => {
+  hideAlert('alertBox');
+  const cvText = document.getElementById('cvText').value.trim();
+  const targetJob = document.getElementById('targetJob').value.trim();
+
+  if (!cvText) { showAlert('alertBox', 'Merci de coller ou importer votre CV.'); return; }
+  if (mode !== 'match' && !targetJob) { showAlert('alertBox', 'Merci d\'indiquer le poste recherché.'); return; }
+
+  const btn = document.getElementById('submitBtn');
+  const progressWrap = document.getElementById('progressWrap');
+  const progressBar = document.getElementById('progressBar');
+  progressWrap.classList.remove('hidden');
+  setButtonLoading(btn, true, 'Analyse en cours...');
+
+  let progress = 8;
+  progressBar.style.width = progress + '%';
+  const interval = setInterval(() => {
+    progress = Math.min(progress + 6, 90);
+    progressBar.style.width = progress + '%';
+  }, 600);
+
+  try {
+    let response;
+    if (mode === 'letter') {
+      const company = document.getElementById('company').value.trim();
+      const jobOffer = document.getElementById('jobOfferLetter').value.trim();
+      response = await generateCoverLetter({ cvText, targetJob, company, jobOffer });
+      sessionStorage.setItem('jobboost_result_type', 'letter');
+    } else if (mode === 'match') {
+      const jobOffer = document.getElementById('jobOfferMatch').value.trim();
+      if (!jobOffer) { throw { message: 'Merci de coller l\'offre d\'emploi.' }; }
+      response = await matchJobOffer({ cvText, jobOffer });
+      sessionStorage.setItem('jobboost_result_type', 'match');
+    } else {
+      response = await analyzeCv(cvText, targetJob);
+      sessionStorage.setItem('jobboost_result_type', 'analyze');
+    }
+
+    progressBar.style.width = '100%';
+    sessionStorage.setItem('jobboost_result', JSON.stringify(response.result));
+    setTimeout(() => { window.location.href = 'result.html'; }, 300);
+  } catch (err) {
+    clearInterval(interval);
+    progressWrap.classList.add('hidden');
+    setButtonLoading(btn, false);
+    showAlert('alertBox', err.message || 'Une erreur est survenue.');
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Résultat — JobBoost AI</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a href="dashboard.html" class="topbar__back">←</a>
+  <div class="topbar__brand">Résultat</div>
+  <span style="width:32px;"></span>
+</header>
+
+<main class="container">
+  <div id="alertBox" class="alert"></div>
+  <div id="content"></div>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="firebase-config.js"></script>
+<script src="app.js"></script>
+<script src="pdf.js"></script>
+<script>
+requireLogin(() => {});
+
+const resultType = sessionStorage.getItem('jobboost_result_type') || 'analyze';
+const rawResult = sessionStorage.getItem('jobboost_result');
+const content = document.getElementById('content');
+
+if (!rawResult) {
+  showAlert('alertBox', 'Aucun résultat à afficher. Lance une nouvelle analyse.');
+} else {
+  const data = JSON.parse(rawResult);
+  if (resultType === 'analyze') renderCvResult(data);
+  else if (resultType === 'letter') renderLetterResult(data);
+  else if (resultType === 'match') renderMatchResult(data);
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+
+function renderCvResult(cv) {
+  const p = cv.personal || {};
+  content.innerHTML = `
+    <div class="card">
+      <div class="ats-score">
+        <div class="ats-score__value">${cv.atsScore ?? '–'}</div>
+        <div><strong>Score ATS estimé</strong><br><span class="muted">Sur 100 — pertinence pour les systèmes de tri automatique.</span></div>
+      </div>
+    </div>
+
+    <div class="card result-section">
+      <h3>Informations personnelles</h3>
+      <input id="f_fullName" value="${esc(p.fullName)}" placeholder="Nom complet">
+      <input id="f_jobTitle" value="${esc(p.jobTitle)}" placeholder="Titre du poste">
+      <input id="f_email" value="${esc(p.email)}" placeholder="Email">
+      <input id="f_phone" value="${esc(p.phone)}" placeholder="Téléphone">
+      <input id="f_location" value="${esc(p.location)}" placeholder="Localisation">
+      <input id="f_linkedin" value="${esc(p.linkedin)}" placeholder="LinkedIn">
+    </div>
+
+    <div class="card result-section">
+      <h3>Profil professionnel</h3>
+      <textarea id="f_summary" rows="4">${esc(cv.summary)}</textarea>
+    </div>
+
+    <div class="card result-section">
+      <h3>Compétences</h3>
+      <div>${(cv.skills || []).map((s) => `<span class="skill-tag">${esc(s)}</span>`).join('') || '<span class="muted">Aucune compétence identifiée.</span>'}</div>
+    </div>
+
+    <div class="card result-section">
+      <h3>Expériences</h3>
+      ${(cv.experiences || []).map((e) => `
+        <div class="experience-block">
+          <strong>${esc(e.position) || '[Information manquante]'}</strong> — ${esc(e.company) || '[Information manquante]'}<br>
+          <span class="muted">${esc(e.startDate)} - ${esc(e.endDate) || 'Présent'}</span>
+          <ul>${(Array.isArray(e.description) ? e.description : [e.description]).filter(Boolean).map((d) => `<li>${esc(d)}</li>`).join('')}</ul>
+        </div>`).join('') || '<p class="muted">Aucune expérience renseignée.</p>'}
+    </div>
+
+    <div class="card result-section">
+      <h3>Formation</h3>
+      ${(cv.education || []).map((e) => `
+        <div class="education-block">
+          <strong>${esc(e.degree) || '[Information manquante]'}</strong> ${e.field ? '— ' + esc(e.field) : ''}<br>
+          <span class="muted">${esc(e.institution)} · ${esc(e.startDate)} - ${esc(e.endDate)}</span>
+        </div>`).join('') || '<p class="muted">Aucune formation renseignée.</p>'}
+    </div>
+
+    ${(cv.languages || []).length ? `<div class="card result-section"><h3>Langues</h3><p>${(cv.languages || []).map(esc).join(' · ')}</p></div>` : ''}
+    ${(cv.certifications || []).length ? `<div class="card result-section"><h3>Certifications</h3><p>${(cv.certifications || []).map(esc).join(' · ')}</p></div>` : ''}
+    ${(cv.projects || []).length ? `<div class="card result-section"><h3>Projets</h3><p>${(cv.projects || []).map(esc).join(' · ')}</p></div>` : ''}
+
+    ${(cv.recommendations || []).length ? `
+    <div class="card result-section" style="background:#EFF4FF;">
+      <h3>Recommandations de l'IA</h3>
+      <ul>${(cv.recommendations || []).map((r) => `<li>${esc(r)}</li>`).join('')}</ul>
+    </div>` : ''}
+
+    <div class="card">
+      <h3>Choisir un modèle de PDF</h3>
+      <div class="field">
+        <select id="templateSelect">
+          <option value="classic">Modèle 1 — Classique professionnel</option>
+          <option value="modern">Modèle 2 — Moderne</option>
+        </select>
+      </div>
+      <button class="btn btn--primary" id="downloadBtn">TÉLÉCHARGER MON CV PDF</button>
+    </div>
+  `;
+
+  document.getElementById('downloadBtn').addEventListener('click', () => {
+    const edited = {
+      ...cv,
+      personal: {
+        fullName: document.getElementById('f_fullName').value,
+        jobTitle: document.getElementById('f_jobTitle').value,
+        email: document.getElementById('f_email').value,
+        phone: document.getElementById('f_phone').value,
+        location: document.getElementById('f_location').value,
+        linkedin: document.getElementById('f_linkedin').value
+      },
+      summary: document.getElementById('f_summary').value
+    };
+    const template = document.getElementById('templateSelect').value;
+    downloadCvPdf(edited, template);
+  });
+}
+
+function renderLetterResult(letter) {
+  content.innerHTML = `
+    <div class="card">
+      <h3>Objet</h3>
+      <input id="f_subject" value="${esc(letter.subject)}">
+    </div>
+    <div class="card">
+      <h3>Lettre de motivation</h3>
+      <textarea id="f_body" rows="18">${esc(letter.body)}</textarea>
+    </div>
+    <button class="btn btn--primary" id="copyBtn">COPIER LE TEXTE</button>
+  `;
+  document.getElementById('copyBtn').addEventListener('click', () => {
+    const text = `${document.getElementById('f_subject').value}\n\n${document.getElementById('f_body').value}`;
+    navigator.clipboard.writeText(text).then(() => showAlert('alertBox', 'Lettre copiée dans le presse-papiers.', 'success'));
+  });
+}
+
+function renderMatchResult(match) {
+  content.innerHTML = `
+    <div class="card">
+      <div class="ats-score">
+        <div class="ats-score__value">${match.matchScore ?? '–'}%</div>
+        <div><strong>Score de correspondance</strong><br><span class="muted">Entre votre CV et l'offre d'emploi.</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Compétences correspondantes</h3>
+      <div>${(match.matchingSkills || []).map((s) => `<span class="skill-tag">${esc(s)}</span>`).join('') || '<span class="muted">Aucune.</span>'}</div>
+    </div>
+    <div class="card">
+      <h3>Compétences manquantes</h3>
+      <div>${(match.missingSkills || []).map((s) => `<span class="skill-tag" style="background:#FEF2F2;color:#DC2626;">${esc(s)}</span>`).join('') || '<span class="muted">Aucune.</span>'}</div>
+    </div>
+    <div class="card">
+      <h3>Mots-clés importants</h3>
+      <p>${(match.importantKeywords || []).map(esc).join(' · ') || '<span class="muted">Aucun.</span>'}</p>
+    </div>
+    <div class="card" style="background:#EFF4FF;">
+      <h3>Recommandations</h3>
+      <ul>${(match.recommendations || []).map((r) => `<li>${esc(r)}</li>`).join('') || '<li class="muted">Aucune recommandation.</li>'}</ul>
+    </div>
+  `;
+}
+</script>
+</body>
+</html>

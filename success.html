@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Paiement — JobBoost AI</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar__brand">Job<span>Boost</span> AI</div>
+  <span style="width:32px;"></span>
+</header>
+
+<main class="container" style="text-align:center; padding-top:48px;">
+  <div id="loadingState">
+    <div class="spinner" style="border-top-color:#2563EB; border-color:rgba(37,99,235,0.2); width:36px;height:36px;margin:0 auto 20px;"></div>
+    <h2>Vérification du paiement...</h2>
+    <p class="muted">Nous confirmons votre transaction auprès de CinetPay. Merci de patienter.</p>
+  </div>
+
+  <div id="successState" class="hidden">
+    <div style="font-size:48px;">✅</div>
+    <h1>Paiement reçu</h1>
+    <div class="card" style="text-align:left; margin-top:20px;">
+      <p><strong>Plan activé :</strong> <span id="planOut"></span></p>
+      <p><strong>Référence :</strong> <span id="txOut"></span></p>
+      <p><strong>Montant :</strong> <span id="amountOut"></span></p>
+      <p><strong>Date :</strong> <span id="dateOut"></span></p>
+    </div>
+    <a href="dashboard.html" class="btn btn--primary" style="margin-top:16px;">Retour au tableau de bord</a>
+  </div>
+
+  <div id="pendingState" class="hidden">
+    <div style="font-size:48px;">⏳</div>
+    <h1>Paiement en attente</h1>
+    <p class="muted">CinetPay n'a pas encore confirmé votre transaction. Cela peut prendre quelques instants pour les paiements mobiles.</p>
+    <button class="btn btn--secondary" id="retryVerifyBtn">Vérifier à nouveau</button>
+    <a href="dashboard.html" class="btn btn--ghost">Retour au tableau de bord</a>
+  </div>
+
+  <div id="failedState" class="hidden">
+    <div style="font-size:48px;">❌</div>
+    <h1>Paiement non confirmé</h1>
+    <p class="muted">Nous n'avons pas pu confirmer ce paiement auprès de CinetPay.</p>
+    <a href="pricing.html" class="btn btn--primary">Réessayer</a>
+  </div>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="app.js"></script>
+<script src="payment.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+const transactionId = params.get('tx') || sessionStorage.getItem('jobboost_pending_tx');
+
+function showState(id) {
+  ['loadingState', 'successState', 'pendingState', 'failedState'].forEach((s) => {
+    document.getElementById(s).classList.toggle('hidden', s !== id);
+  });
+}
+
+async function runVerification() {
+  if (!transactionId) { showState('failedState'); return; }
+  showState('loadingState');
+  try {
+    const result = await verifyPayment(transactionId);
+    if (result.status === 'confirmed') {
+      document.getElementById('planOut').textContent = (result.plan || '').toUpperCase();
+      document.getElementById('txOut').textContent = transactionId;
+      document.getElementById('amountOut').textContent = `${result.amount} ${result.currency}`;
+      document.getElementById('dateOut').textContent = new Date().toLocaleString('fr-FR');
+      sessionStorage.removeItem('jobboost_pending_tx');
+      showState('successState');
+    } else if (result.status === 'pending') {
+      showState('pendingState');
+    } else {
+      showState('failedState');
+    }
+  } catch (err) {
+    showState('failedState');
+  }
+}
+
+requireLogin(() => { runVerification(); });
+
+document.getElementById('retryVerifyBtn')?.addEventListener('click', runVerification);
+</script>
+</body>
+</html>
