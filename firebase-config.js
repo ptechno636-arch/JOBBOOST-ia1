@@ -1,25 +1,19 @@
-// firebase-config.js
-// Ces valeurs sont PUBLIQUES et destinées à être utilisées côté navigateur :
-// c'est ainsi que fonctionne le SDK client Firebase. La sécurité réelle
-// vient des règles Firestore (firestore.rules) et de la vérification des
-// tokens côté backend, pas du secret de ce fichier.
-//
-// Remplace ces valeurs par celles de TON projet Firebase
-// (Console Firebase > Paramètres du projet > Vos applications > Config SDK).
+<script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
 
-const firebaseConfig = {
-  apiKey: "REMPLACE_MOI",
-  authDomain: "REMPLACE_MOI.firebaseapp.com",
-  projectId: "REMPLACE_MOI",
-  storageBucket: "REMPLACE_MOI.appspot.com",
-  messagingSenderId: "REMPLACE_MOI",
-  appId: "REMPLACE_MOI"
-};
+  // Your web app's Firebase configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyBFIxJwUaTWPFUQcIbPsB-NEbsBhuzuwf4",
+    authDomain: "jobboost-ai-65602.firebaseapp.com",
+    projectId: "jobboost-ai-65602",
+    storageBucket: "jobboost-ai-65602.firebasestorage.app",
+    messagingSenderId: "964433105460",
+    appId: "1:964433105460:web:1992239020e6151c26f061"
+  };
 
-// URL du backend sécurisé (Render, Railway, Fly.io, Cloud Run...).
-// C'est ce backend qui détient les vraies clés secrètes Gemini/CinetPay.
-const BACKEND_URL = "https://REMPLACE-PAR-TON-BACKEND.example.com";
-
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+</script>
